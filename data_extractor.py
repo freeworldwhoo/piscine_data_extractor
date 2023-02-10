@@ -3,12 +3,14 @@ import pandas as pd
 
 import os
 
-token = "0381331d844aeee5a8766c4f3648e49c1f6d8b0e"
+# token = "0381331d844aeee5a8766c4f3648e49c1f6d8b0e"
+token = "69c596693dbded4d94b4266e6b0b4a589207f7a2"
 
-school_link = "https://learn.zone01dakar.sn"
+# school_link = "https://learn.01founders.co"
+school_link = "https://learn.01founders.co"
 
-piscine_object_name = "Piscine Go"
-
+# piscine_object_name = "Piscine Go"
+piscine_object_name = "Piscine JS"
 
 
 
@@ -36,6 +38,8 @@ get_piscines = {"query":'''
 piscines = requests.post(school_link+"/api/graphql-engine/v1/graphql",headers=headers,json=get_piscines).json()['data']['event']
 d = -1
 os.system('clear')
+if len(piscines) == 0:
+  print("No piscine is ascociated with object%s"%piscine_object_name)
 while d < 0 or d >= len(piscines):
   for i in range(len(piscines)):
     print("%d- id: %d\n\tstart:%s\n\tend:%s\n\n"%(i,piscines[i]['id'],piscines[i]['createdAt'],piscines[i]['endAt']))
@@ -186,6 +190,8 @@ for id in organized_data:
 
 exams_lvls = {}
 
+exam_to_examlvl = {}
+
 for prog in data['progress_on_exams']:
   exam_obj_id = prog['event']['object']['id']
   if exam_obj_id not in exams_lvls:
@@ -218,13 +224,122 @@ for prog in data['progress_on_exams']:
         exams_lvls[ex_id]["max_lvl"] = level
   if prog['grade'] >= 1:
     key = "%s lvl (%d)"%(exams_lvls[exam_obj_id]['name'], exams_lvls[exam_obj_id]["max_lvl"])
+    exam_to_examlvl[exams_lvls[exam_obj_id]['name']] = key
     if key in organized_data[prog["userId"]]:
       organized_data[prog["userId"]][key]=max(exams_lvls[exam_obj_id]["exercises"][prog['object']['id']],organized_data[prog["userId"]][key])
     else:
       organized_data[prog["userId"]][key] = exams_lvls[exam_obj_id]["exercises"][prog['object']['id']]
 
 
-data=[organized_data[id] for id in organized_data]
-table = pd.DataFrame.from_dict(data)
 
-table.to_excel("output.xlsx")
+
+
+data=[organized_data[id] for id in organized_data]
+
+data_length = len(data)
+
+example_data = data[0]
+
+columns = ["login","xp","level",'quests',"raid"]
+
+raid_index = len(columns)
+
+raids = []
+exams = []
+
+query = {"query":'''
+                    {
+                    event(where: {parent: {id: {_eq: %d}}},
+                    order_by:{registration:{eventStartAt:asc}}) {
+                      id
+                      registration{
+                        eventStartAt
+                      }
+                      object {
+                        name
+                        type
+                      }
+                    }
+                  }
+    '''%(piscine_id)}
+  
+events_in_order = requests.post(school_link+"/api/graphql-engine/v1/graphql",headers=headers,json=query).json()['data']['event']
+for event in events_in_order:
+  if event['object']['type'] == 'exam' and event['object']['name'] in example_data:
+    print()
+    exams.append(event['object']['name'] )
+    exams.append(exam_to_examlvl[event['object']['name'] ])
+  elif event['object']['type'] == 'raid' and event['object']['name'] in example_data:
+    raids.append(event['object']['name'] )
+
+columns += raids
+columns += exams
+
+table = pd.DataFrame.from_dict(data)[columns]
+
+
+table.to_excel("output.xlsx",freeze_panes=(1,0))
+
+
+import openpyxl
+from openpyxl.styles import PatternFill,Border,Side
+
+wb = openpyxl.load_workbook("./output.xlsx") 
+ws = wb['Sheet1']
+
+ws.delete_cols(1)
+
+red = PatternFill(patternType='solid', fgColor='FC2C03')
+header_color = PatternFill(patternType='solid', fgColor='80B0C8')
+raid_color = PatternFill(patternType='solid', fgColor='78B7B7')
+raids_color = PatternFill(patternType='solid', fgColor='20DAA5')
+exam_color1 = PatternFill(patternType='solid', fgColor='C6DFE7')
+exam_color2 = PatternFill(patternType='solid', fgColor='006384')
+login_color = PatternFill(patternType='solid', fgColor='78B7B7')
+level_color = PatternFill(patternType='solid', fgColor='C2CCA6')
+xp_color = PatternFill(patternType='solid', fgColor='E59B86')
+quests_color = PatternFill(patternType='solid', fgColor='F6E5BC')
+
+
+
+thin_border = Border(left=Side(style='thin'), 
+                  right=Side(style='thin'), 
+                  top=Side(style='thin'), 
+                  bottom=Side(style='thin'))
+
+
+
+
+r = 1
+for row in ws.iter_rows():
+  c = 1
+  for cell in row:
+    if cell.internal_value is None:
+      cell.fill = red
+    elif r == 1:
+      cell.fill = header_color
+    elif c == 1:
+      cell.fill = login_color
+    elif c == 2:
+      cell.fill = xp_color
+    elif c == 3:
+      cell.fill = level_color
+    elif c == 4:
+      cell.fill = quests_color
+    elif c == raid_index:
+      # print("here")
+      cell.fill = raid_color
+    elif c > raid_index and  c <= raid_index + len(raids) :
+      cell.fill = raids_color
+    elif c > raid_index + len(raids):
+      if ((c - raid_index - len(raids) - 1)//2)%2 ==0:
+        cell.fill = exam_color1
+      else:
+        cell.fill = exam_color2
+    cell.border = thin_border  
+    c+=1
+  r+=1
+ws.freeze_panes = 'B2'
+
+wb.save("./output.xlsx")
+

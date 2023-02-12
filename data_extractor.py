@@ -1,27 +1,16 @@
 import requests
 import pandas as pd
+from config import token,school_link,piscine_object_name
 
 import os
 
-# token = "0381331d844aeee5a8766c4f3648e49c1f6d8b0e"
-token = "69c596693dbded4d94b4266e6b0b4a589207f7a2"
-
-# school_link = "https://learn.01founders.co"
-school_link = "https://learn.01founders.co"
-
-# piscine_object_name = "Piscine Go"
-piscine_object_name = "Piscine JS"
-
-
-
-
+#request bearer token from /api/auth/token
 token_request = requests.get(school_link+"/api/auth/token",params={"token":token})
-
-
 bearer_token = token_request.json()
 
-headers = {"Authorization":"Bearer "+bearer_token,'Content-Type': 'application/json'}
 
+#get list of trgeted piscine events
+headers = {"Authorization":"Bearer "+bearer_token,'Content-Type': 'application/json'}
 get_piscines = {"query":'''
   {event(where:{object:{name:{_eq:"%s"}}}) {
     createdAt
@@ -33,13 +22,18 @@ get_piscines = {"query":'''
     }
   }}
 '''%(piscine_object_name)}
-
-
 piscines = requests.post(school_link+"/api/graphql-engine/v1/graphql",headers=headers,json=get_piscines).json()['data']['event']
+
+
 d = -1
 os.system('clear')
+
+#if no piscine event exists, exit from the script. 
 if len(piscines) == 0:
-  print("No piscine is ascociated with object%s"%piscine_object_name)
+  print("No piscine is ascociated with object:\t%s"%piscine_object_name)
+  exit()
+
+#loop to choose the desired event
 while d < 0 or d >= len(piscines):
   for i in range(len(piscines)):
     print("%d- id: %d\n\tstart:%s\n\tend:%s\n\n"%(i,piscines[i]['id'],piscines[i]['createdAt'],piscines[i]['endAt']))
@@ -48,17 +42,24 @@ while d < 0 or d >= len(piscines):
   except:
     pass
 
+
+
+
 piscine_id = piscines[d]['id']
 object_id = piscines[d]["object"]["id"]
 print(object_id)
 
 
+#quesry to get all needed data
 get_data = {"query":'''
   {
   levels: event_user(where: {eventId: {_eq: %d}}) {
     level
     userId
     userLogin
+    user{
+      attrs
+    }
   }
 
   xp_transactions: transaction(
@@ -134,8 +135,9 @@ data = requests.post(school_link+"/api/graphql-engine/v1/graphql",headers=header
 
 organized_data = {}
 
+#extarct and calculate the data to put in the dictionary
 for user in data['levels']:
-  organized_data[user["userId"]] = {"login":user["userLogin"],"level" : user["level"]}
+  organized_data[user["userId"]] = {"login":user["userLogin"],"level" : user["level"],"gender":user['user']["attrs"]["gender"]}
 for transaction in data['xp_transactions']:
   userId = transaction["user"]["id"]
   if "xp" in organized_data[userId]:
@@ -232,7 +234,7 @@ for prog in data['progress_on_exams']:
 
 
 
-
+#organise comlumns to extract as an excel file
 
 data=[organized_data[id] for id in organized_data]
 
@@ -240,7 +242,7 @@ data_length = len(data)
 
 example_data = data[0]
 
-columns = ["login","xp","level",'quests',"raid"]
+columns = ["login","gender","xp","level",'quests',"raid"]
 
 raid_index = len(columns)
 
@@ -278,29 +280,38 @@ columns += exams
 table = pd.DataFrame.from_dict(data)[columns]
 
 
-table.to_excel("output.xlsx",freeze_panes=(1,0))
+#extarct to excel file 
+table.to_excel("%s_%d.xlsx"%(piscine_object_name,piscine_id),freeze_panes=(1,0))
 
 
+#add colors to the excel file
 import openpyxl
 from openpyxl.styles import PatternFill,Border,Side
 
-wb = openpyxl.load_workbook("./output.xlsx") 
+wb = openpyxl.load_workbook("%s_%d.xlsx"%(piscine_object_name,piscine_id)) 
 ws = wb['Sheet1']
 
 ws.delete_cols(1)
 
-red = PatternFill(patternType='solid', fgColor='FC2C03')
+grey = PatternFill(patternType='solid', fgColor='4F5A5E')
 header_color = PatternFill(patternType='solid', fgColor='80B0C8')
 raid_color = PatternFill(patternType='solid', fgColor='78B7B7')
 raids_color = PatternFill(patternType='solid', fgColor='20DAA5')
 exam_color1 = PatternFill(patternType='solid', fgColor='C6DFE7')
-exam_color2 = PatternFill(patternType='solid', fgColor='006384')
+exam_color2 = PatternFill(patternType='solid', fgColor='0C95C8')
 login_color = PatternFill(patternType='solid', fgColor='78B7B7')
+gender_color = PatternFill(patternType='solid', fgColor='AC84E8')
 level_color = PatternFill(patternType='solid', fgColor='C2CCA6')
 xp_color = PatternFill(patternType='solid', fgColor='E59B86')
 quests_color = PatternFill(patternType='solid', fgColor='F6E5BC')
 
+red = PatternFill(patternType='solid', fgColor='FF0000')
+orange = PatternFill(patternType='solid', fgColor='F78C11')
+yellow  = PatternFill(patternType='solid', fgColor='fce005')
+grean = PatternFill(patternType='solid', fgColor='2FEB32')
+Blue_sky = PatternFill(patternType='solid', fgColor='2FB6EB')
 
+grade_colors = [red,orange,yellow,grean,Blue_sky,Blue_sky,Blue_sky]
 
 thin_border = Border(left=Side(style='thin'), 
                   right=Side(style='thin'), 
@@ -308,38 +319,46 @@ thin_border = Border(left=Side(style='thin'),
                   bottom=Side(style='thin'))
 
 
-
-
 r = 1
 for row in ws.iter_rows():
   c = 1
   for cell in row:
     if cell.internal_value is None:
-      cell.fill = red
+      cell.fill = grey
     elif r == 1:
       cell.fill = header_color
     elif c == 1:
       cell.fill = login_color
     elif c == 2:
-      cell.fill = xp_color
+      cell.fill = gender_color
     elif c == 3:
-      cell.fill = level_color
+      cell.fill = xp_color
     elif c == 4:
+      cell.fill = level_color
+    elif c == 5:
       cell.fill = quests_color
     elif c == raid_index:
-      # print("here")
       cell.fill = raid_color
     elif c > raid_index and  c <= raid_index + len(raids) :
-      cell.fill = raids_color
+      if cell.internal_value >= 100:
+        cell.fill = Blue_sky
+      else:
+        cell.fill = raids_color
     elif c > raid_index + len(raids):
       if ((c - raid_index - len(raids) - 1)//2)%2 ==0:
-        cell.fill = exam_color1
+        if (c - raid_index - len(raids) - 1) % 2 ==0:
+          cell.fill = grade_colors[int(cell.internal_value)//20]
+        else:
+          cell.fill = exam_color1
       else:
-        cell.fill = exam_color2
+        if (c - raid_index - len(raids) - 1) % 2 ==0:
+          cell.fill = grade_colors[int(cell.internal_value)//20]
+        else:
+          cell.fill = exam_color2
     cell.border = thin_border  
     c+=1
   r+=1
 ws.freeze_panes = 'B2'
 
-wb.save("./output.xlsx")
+wb.save("%s_%d.xlsx"%(piscine_object_name,piscine_id))
 

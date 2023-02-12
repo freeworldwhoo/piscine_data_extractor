@@ -45,6 +45,6 @@ You have to enter the index of the desired piscine you want to extract data from
 
 ## **output**
 
-Running the script will output an Excel file cemelar to this image
+Running the script will output an Excel file similar to this image
 
 ![image](./images/excel%20example%20output.jpg)

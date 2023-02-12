@@ -47,7 +47,6 @@ while d < 0 or d >= len(piscines):
 
 piscine_id = piscines[d]['id']
 object_id = piscines[d]["object"]["id"]
-print(object_id)
 
 
 #quesry to get all needed data
@@ -268,7 +267,6 @@ query = {"query":'''
 events_in_order = requests.post(school_link+"/api/graphql-engine/v1/graphql",headers=headers,json=query).json()['data']['event']
 for event in events_in_order:
   if event['object']['type'] == 'exam' and event['object']['name'] in example_data:
-    print()
     exams.append(event['object']['name'] )
     exams.append(exam_to_examlvl[event['object']['name'] ])
   elif event['object']['type'] == 'raid' and event['object']['name'] in example_data:
@@ -361,4 +359,5 @@ for row in ws.iter_rows():
 ws.freeze_panes = 'B2'
 
 wb.save("%s_%d.xlsx"%(piscine_object_name,piscine_id))
+print("data output file name is %s"%"%s_%d.xlsx"%(piscine_object_name,piscine_id))
 

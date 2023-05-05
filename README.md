@@ -12,7 +12,7 @@ Before you run the script, you have to set certain variables in the `config.py`
 
 You should generate the token from your gitea in the link `https://[center link]/git/user/settings/applications`
 
-### **achool_link**
+### **school_link**
 
 This is the center link, it should be full link `https://learn.example.com`
 

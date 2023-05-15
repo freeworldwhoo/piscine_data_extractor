@@ -49,6 +49,7 @@ piscine_id = piscines[d]['id']
 object_id = piscines[d]["object"]["id"]
 
 
+
 #quesry to get all needed data
 get_data = {"query":'''
   {
@@ -144,28 +145,39 @@ for transaction in data['xp_transactions']:
   else:
     organized_data[userId]['xp'] = transaction['amount']
 
+raid_exist = False
+
+exams_and_raids_list = []
 for obj in data['raids_and_exams']:
   if obj['object']['type'] == 'exam':
     for user in obj['progresses']:
       if user['grade'] is not None:
-        organized_data[user['userId']][obj['object']['name']] = round(user['grade']*100,2)
+        organized_data[user['userId']][obj['object']['name']+" [\"id: %d\"]"%obj["id"]] = round(user['grade']*100,2)
+        exams_and_raids_list.append(obj['object']['name'])
   elif obj['object']['type'] == 'raid':
     for user in obj['progresses']:
       if user['grade'] is not None:
         if 'raid' in organized_data[user['userId']]:
           organized_data[user['userId']]['raid'] += int(user['grade'] >= 1)
+          exams_and_raids_list.append(obj['object']['name'])
         else:
           organized_data[user['userId']]['raid'] = int(user['grade'] >= 1)
+          exams_and_raids_list.append(obj['object']['name'])
+        raid_exist = True
         organized_data[user['userId']][obj['object']['name']] = round(user['grade']*100,2)
+
 
 quests = {}
 exercises = {}
+quest_exercise_name = {}
 for quest in data['piscine_quests']:
+  quest_exercise_name[quest['name']] = []
   quests[quest['name']] = []
   for exercise in quest['childrenRelation']:
-    if not ( "exerciseType" in exercise['attrs'] and exercise['attrs']["exerciseType"] == "optional"):
+    if not ( "category" in exercise['attrs'] and exercise['attrs']["category"] in ["optional","bonus"]):
       quests[quest['name']].append(exercise["child"]["id"])
       exercises[exercise["child"]["id"]] = quest['name']
+      quest_exercise_name[quest['name']].append(exercise["child"]["name"] )
 
 quests_user_data = {}
 
@@ -193,8 +205,11 @@ exams_lvls = {}
 
 exam_to_examlvl = {}
 
+
+
 for prog in data['progress_on_exams']:
   exam_obj_id = prog['event']['object']['id']
+  exam_event_id = prog['event']['id']
   if exam_obj_id not in exams_lvls:
     query = {"query":'''
                     {
@@ -224,8 +239,8 @@ for prog in data['progress_on_exams']:
       if level > exams_lvls[ex_id]["max_lvl"]:
         exams_lvls[ex_id]["max_lvl"] = level
   if prog['grade'] >= 1:
-    key = "%s lvl (%d)"%(exams_lvls[exam_obj_id]['name'], exams_lvls[exam_obj_id]["max_lvl"])
-    exam_to_examlvl[exams_lvls[exam_obj_id]['name']] = key
+    key = "%s  [\"id: %d\"] lvl (%d)"%(exams_lvls[exam_obj_id]['name'],exam_event_id , exams_lvls[exam_obj_id]["max_lvl"])
+    exam_to_examlvl[exam_event_id] = key
     if key in organized_data[prog["userId"]]:
       organized_data[prog["userId"]][key]=max(exams_lvls[exam_obj_id]["exercises"][prog['object']['id']],organized_data[prog["userId"]][key])
     else:
@@ -235,13 +250,15 @@ for prog in data['progress_on_exams']:
 
 #organise comlumns to extract as an excel file
 
+
+
 data=[organized_data[id] for id in organized_data]
 
 data_length = len(data)
 
-example_data = data[0]
-
-columns = ["login","gender","xp","level",'quests',"raid"]
+columns = ["login","gender","xp","level",'quests']
+if raid_exist :
+  columns.append("raid")
 
 raid_index = len(columns)
 
@@ -266,11 +283,12 @@ query = {"query":'''
   
 events_in_order = requests.post(school_link+"/api/graphql-engine/v1/graphql",headers=headers,json=query).json()['data']['event']
 for event in events_in_order:
-  if event['object']['type'] == 'exam' and event['object']['name'] in example_data:
-    exams.append(event['object']['name'] )
-    exams.append(exam_to_examlvl[event['object']['name'] ])
-  elif event['object']['type'] == 'raid' and event['object']['name'] in example_data:
-    raids.append(event['object']['name'] )
+  if event['object']['name'] in exams_and_raids_list:
+    if event['object']['type'] == 'exam':
+      exams.append(event['object']['name']+" [\"id: %d\"]"%event["id"] )
+      exams.append(exam_to_examlvl[event["id"]])
+    elif event['object']['type'] == 'raid':
+      raids.append(event['object']['name'] )
 
 columns += raids
 columns += exams
@@ -358,6 +376,6 @@ for row in ws.iter_rows():
   r+=1
 ws.freeze_panes = 'B2'
 
-wb.save("%s_%d.xlsx"%(piscine_object_name,piscine_id))
-print("data output file name is %s"%"%s_%d.xlsx"%(piscine_object_name,piscine_id))
+wb.save("%s__%d.xlsx"%(piscine_object_name,piscine_id))
+print("data output file name is %s"%"%s__%d.xlsx"%(piscine_object_name,piscine_id))
 
